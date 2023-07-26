@@ -1,12 +1,115 @@
 version: "3.5"
 services:
-  mongo:
-    image: mongo:4.4
-    command: --nojournal
+  # Orion is the context broker
   orion:
-    image: fiware/orion
-    links:
-      - mongo
+    labels:
+      org.fiware: 'SmartHome'
+    image: quay.io/fiware/orion:${ORION_VERSION}
+    hostname: orion
+    container_name: fiware-orion
+    restart: always
+    depends_on:
+      - mongo-db
+    networks:
+      - default
+    expose:
+      - "${ORION_PORT}"
     ports:
-      - "1026:1026"
-    command: -dbhost mongo
+      - "${ORION_PORT}:${ORION_PORT}" # localhost:1026
+    command: -dbhost mongo-db -logLevel DEBUG -forwarding -corsOrigin __ALL
+    healthcheck:
+      test: curl --fail -s http://orion:${ORION_PORT}/version || exit 1
+      interval: 5s
+
+
+  quantumleap:
+    labels:
+      org.fiware: 'SmartHome'
+    image: orchestracities/quantumleap:${QUANTUMLEAP_VERSION}
+    hostname: quantumleap
+    container_name: fiware-quantumleap
+    depends_on:
+      - crate-db
+      - redis-db
+    networks:
+      - default
+    ports:
+      - "${QUANTUMLEAP_PORT}:${QUANTUMLEAP_PORT}"
+    environment:
+      - CRATE_HOST=crate-db
+      - REDIS_HOST=redis-db
+      - REDIS_PORT=${REDIS_PORT}
+      - LOGLEVEL=DEBUG
+    healthcheck:
+      test: curl --fail -s http://quantumleap:${QUANTUMLEAP_PORT}/version || exit 1
+
+
+  redis-db:
+    labels:
+      org.fiware: 'SmartHome'
+    image: redis:${REDIS_VERSION}
+    hostname: redis-db
+    container_name: db-redis
+    networks:
+      - default
+    ports:
+      - "${REDIS_PORT}:${REDIS_PORT}" # localhost:6379
+    volumes:
+      - redis-db:/data
+    healthcheck:
+      test: ["CMD", "redis-cli","ping"]
+      interval: 10s
+
+
+  crate-db:
+    labels:
+      org.fiware: 'SmartHome'
+    image: crate:${CRATE_VERSION}
+    hostname: crate-db
+    container_name: db-crate
+    ports:
+      # Admin UI
+      - "4200:4200"
+      # Transport protocol
+      - "4300:4300"
+    command: crate -Cauth.host_based.enabled=false  -Ccluster.name=democluster -Chttp.cors.enabled=true -Chttp.cors.allow-origin="*" -Cnetwork.host=_site_
+    environment:
+      - CRATE_HEAP_SIZE=2g # see https://crate.io/docs/crate/howtos/en/latest/deployment/containers/docker.html#troubleshooting
+    volumes:
+      - crate-db:/data
+
+  mongo-db:
+    labels:
+      org.fiware: 'SmartHome'
+    image: mongo:${MONGO_DB_VERSION}
+    hostname: mongo-db
+    container_name: db-mongo
+    expose:
+      - "${MONGO_DB_PORT}"
+    ports:
+      - "${MONGO_DB_PORT}:${MONGO_DB_PORT}" # localhost:27017
+    networks:
+      - default
+    volumes:
+      - mongo-db:/data/db
+      - mongo-config:/data/configdb
+      #- ./mongoRestore/mongoRestore.sh:/docker-entrypoint-initdb.d/
+      #- ./backups/db.dump:/backups/db.dump
+    healthcheck:
+      test: [ "CMD", "mongo", "--quiet", "127.0.0.1/test", "--eval", "'quit(db.runCommand({ ping: 1 }).ok ? 0 : 2)'"]
+      interval: 5s
+
+volumes:
+  crate-db: ~
+  redis-db: ~
+  mongo-db: ~
+  mongo-config: ~
+
+
+networks:
+  default:
+    labels:
+      org.fiware: 'SmartHome'
+    ipam:
+      config:
+        - subnet: 172.18.1.0/24
