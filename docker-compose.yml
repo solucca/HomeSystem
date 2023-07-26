@@ -1,115 +1,35 @@
 version: "3.5"
+
 services:
-  # Orion is the context broker
-  orion:
-    labels:
-      org.fiware: 'SmartHome'
-    image: quay.io/fiware/orion:${ORION_VERSION}
-    hostname: orion
-    container_name: fiware-orion
+  backend:
+    build:
+      context: ./backend  # Set the build context to the backend folder
+      dockerfile: Dockerfile  # Name of your Dockerfile, change if necessary
+    ports:
+      - "8000:8000"  # Expose the desired ports (host:container)
+    restart: always  # Automatically restart the container if it stops
+
+# Add other services if required
+# For example, you can add a database service here if your backend requires it.
+# Just make sure to configure the necessary settings accordingly.
+  grafana:
+    image: grafana/grafana:9.4.2 
+    container_name: grafana
     restart: always
-    depends_on:
-      - mongo-db
-    networks:
-      - default
-    expose:
-      - "${ORION_PORT}"
     ports:
-      - "${ORION_PORT}:${ORION_PORT}" # localhost:1026
-    command: -dbhost mongo-db -logLevel DEBUG -forwarding -corsOrigin __ALL
-    healthcheck:
-      test: curl --fail -s http://orion:${ORION_PORT}/version || exit 1
-      interval: 5s
-
-
-  quantumleap:
-    labels:
-      org.fiware: 'SmartHome'
-    image: orchestracities/quantumleap:${QUANTUMLEAP_VERSION}
-    hostname: quantumleap
-    container_name: fiware-quantumleap
-    depends_on:
-      - crate-db
-      - redis-db
-    networks:
-      - default
-    ports:
-      - "${QUANTUMLEAP_PORT}:${QUANTUMLEAP_PORT}"
+      - "3003:3000"
     environment:
-      - CRATE_HOST=crate-db
-      - REDIS_HOST=redis-db
-      - REDIS_PORT=${REDIS_PORT}
-      - LOGLEVEL=DEBUG
-    healthcheck:
-      test: curl --fail -s http://quantumleap:${QUANTUMLEAP_PORT}/version || exit 1
-
-
-  redis-db:
-    labels:
-      org.fiware: 'SmartHome'
-    image: redis:${REDIS_VERSION}
-    hostname: redis-db
-    container_name: db-redis
-    networks:
-      - default
-    ports:
-      - "${REDIS_PORT}:${REDIS_PORT}" # localhost:6379
+      - GF_SECURITY_ALLOW_EMBEDDING=true
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+    #  - GF_INSTALL_PLUGINS=https://github.com/orchestracities/grafana-map-plugin/archive/master.zip;grafana-map-plugin,grafana-clock-panel,grafana-worldmap-panel
     volumes:
-      - redis-db:/data
-    healthcheck:
-      test: ["CMD", "redis-cli","ping"]
-      interval: 10s
-
-
-  crate-db:
-    labels:
-      org.fiware: 'SmartHome'
-    image: crate:${CRATE_VERSION}
-    hostname: crate-db
-    container_name: db-crate
-    ports:
-      # Admin UI
-      - "4200:4200"
-      # Transport protocol
-      - "4300:4300"
-    command: crate -Cauth.host_based.enabled=false  -Ccluster.name=democluster -Chttp.cors.enabled=true -Chttp.cors.allow-origin="*" -Cnetwork.host=_site_
-    environment:
-      - CRATE_HEAP_SIZE=2g # see https://crate.io/docs/crate/howtos/en/latest/deployment/containers/docker.html#troubleshooting
-    volumes:
-      - crate-db:/data
-
-  mongo-db:
-    labels:
-      org.fiware: 'SmartHome'
-    build: 
-      context: ./mongo-db
-      dockerfile: Dockerfile
-    hostname: mongo-db
-    container_name: db-mongo
-    expose:
-      - "${MONGO_DB_PORT}"
-    ports:
-      - "${MONGO_DB_PORT}:${MONGO_DB_PORT}" # localhost:27017
-    networks:
-      - default
-    volumes:
-      - mongo-db:/data/db
-      - mongo-config:/data/configdb
-    healthcheck:
-      test: [ "CMD", "mongo", "--quiet", "127.0.0.1/test", "--eval", "'quit(db.runCommand({ ping: 1 }).ok ? 0 : 2)'"]
-      interval: 5s
+      - grafana:/var/lib/grafana
 
 volumes:
-  crate-db: ~
-  redis-db: ~
-  mongo-db: ~
-  mongo-config: ~
-
+  grafana: ~
 
 networks:
   default:
-    labels:
-      org.fiware: 'SmartHome'
     ipam:
       config:
         - subnet: 172.18.1.0/24
