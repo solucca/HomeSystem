@@ -63,7 +63,7 @@ def table_exists(entity_type: str) -> bool:
 
 def match_schema(payload: dict) -> bool:
     if not table_exists(payload.get("type")): return False
-    entity_type = payload.get("type")
+    entity_type = payload.get("type").lower()
     cnx = mysql.connector.connect(**DATABASE_CONFIG)
     cursor = cnx.cursor()
     try:
