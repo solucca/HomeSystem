@@ -2,7 +2,7 @@ import requests
 import json
 
 # Replace with the appropriate URL for your FastAPI server
-BASE_URL = "http://localhost:8000/entities/"
+BASE_URL = "http://mypi:8000/entities/"
 
 def send_post_request(payload):
     url = BASE_URL
@@ -19,7 +19,7 @@ if __name__ == "__main__":
     # Replace with the desired payload
     
     payload = {
-        "id": "01",
+        "id": "02",
         "type": "Weather",
         "temperature": { "type": "float",  "value": 15.0 },
         "humidity": { "type": "int",  "value": 28 }

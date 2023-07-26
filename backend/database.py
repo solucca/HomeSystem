@@ -1,5 +1,5 @@
 import mysql.connector
-from typing import Tuple, List, Union
+from typing import Dict
 import json 
 
 DATABASE_CONFIG = {}
@@ -61,7 +61,24 @@ def table_exists(entity_type: str) -> bool:
         tables.append(name[0])
     return entity_type.lower() in tables
 
-def save_entity(payload: dict) -> str:
+def match_schema(payload: dict) -> bool:
+    if not table_exists(payload.get("type")): return False
+    entity_type = payload.get("type")
+    cnx = mysql.connector.connect(**DATABASE_CONFIG)
+    cursor = cnx.cursor()
+    try:
+        cursor.execute(f"DESCRIBE {entity_type};")
+        data = [i[0] for i in cursor.fetchall()]
+        for key, value in payload.items():
+            if key in ["id", "type"]: continue 
+            elif not key in data: return False
+        return True
+        
+    finally:
+        cursor.close()
+        cnx.close()
+
+def save_entity(payload: dict) -> bool:
     """Saves the Entity in a Table.
     If there is no Table for this Type of entity, one is created.
     """
@@ -69,6 +86,8 @@ def save_entity(payload: dict) -> str:
 
     if not table_exists(entity_type):
         create_table(payload)
+    if not match_schema(payload):
+        return False
 
     # Construct the SQL insert query
     columns = ["entity_id"]
@@ -99,13 +118,17 @@ def save_entity(payload: dict) -> str:
         cursor.close()
         cnx.close()
 
-    return entity_id
+    return True
 
-def get_entity(entity_id: str, n: int = None) -> Union[Tuple[List, Tuple], None]:
+def get_entity(entity_id: str, n: int = None) -> Dict[str, object]:
+    """Saves the Entity in a Table.
+    If there is no Table for this Type of entity, one is created.
+    """
+    if not ":" in entity_id: return {"Error" : "Wrong Format <Entity_Type>:<Entity_Id>"}
     entity_type, entity_id = entity_id.split(':')
     table_name = entity_type.lower()
     
-    if not table_exists(entity_type): return None
+    if not table_exists(entity_type): return {"Error" : f"No data for the type {entity_type}"}
     if not n: n = 1
 
     # Connect to the MariaDB database
@@ -135,8 +158,6 @@ def get_entity(entity_id: str, n: int = None) -> Union[Tuple[List, Tuple], None]
         conn.close()
 
 if __name__ == "__main__":
-    from time import sleep
-  
     print("Running test on database")
     print(f"Testing connection: {table_exists('SoilSensor')}")
     payload = {
@@ -146,6 +167,10 @@ if __name__ == "__main__":
         "soil_humidity": {"type": "int", "value": 28},
         "last_water":{"type": "datetime", "value": "2020-07-26 20:20:20"}
     }
-    out = get_entity("Weather:01")
-    print(out)
+    payload2 = {
+        "id": "02",
+        "type": "weather",
+        "temperature": {"type": "float", "value": 15.0}
+    }
+    print( get_entity("weather:02") )
 

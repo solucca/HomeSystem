@@ -6,15 +6,19 @@ import database
 app = FastAPI()
 
 @app.post("/entities/")
-async def create_entity(payload: Dict):
+async def create_entity(
+    payload: Dict = Body(..., title="Payload Information",
+                         description="Data to be saved in the database",
+                         example={"type":"weather", "id":"01","temperature": {"type":"float", "value":"15.0"}})
+):
     entity_id = payload.get("id")
     entity_type = payload.get("type")
 
     if not entity_id or not entity_type:
         raise HTTPException(status_code=400, detail="Invalid payload format")
 
-    database.save_entity(payload)
-    return {"message": "Entity created successfully"}
+    data = database.save_entity(payload)
+    return data
 
 @app.get("/entities/{entity_id}")
 async def get_entity(
