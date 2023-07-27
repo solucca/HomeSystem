@@ -15,14 +15,21 @@ def send_post_request(payload):
         print(f"Failed to create entity. Status code: {response.status_code}")
         print(response.text)
 
+def modify_table(payload):
+    url = "http://mypi:8000/types/weather"
+    headers = {"Content-Type": "application/json"}
+    response = requests.patch(url, headers=headers, data=json.dumps(payload))
+    if response.status_code == 200:
+        print("POST request successful. Entity created.")
+        print(response.text)
+    else:
+        print(f"Failed to create entity. Status code: {response.status_code}")
+        print(response.text)
+
+
 if __name__ == "__main__":
     # Replace with the desired payload
-    
-    payload = {
-        "id": "02",
-        "type": "Weather",
-        "temperature": { "type": "float",  "value": 15.0 },
-        "humidity": { "type": "int",  "value": 28 }
-    }
-
-    send_post_request(payload)
+    payload = {"field":"humidity", "type":"float"}
+    modify_table(payload)
+    payload = {"field":"heat_index", "type":"float"}
+    modify_table(payload)

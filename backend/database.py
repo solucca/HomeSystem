@@ -216,13 +216,12 @@ def modify_type_table(type: str, new_column: dict):
         cnx = mysql.connector.connect()
         cursor = cnx.cursor()
         cursor.execute(f"ALTER TABLE {type} ADD {new_column['field']} {datatype};")
-        return {'success', f'added column: {type}'}
-    
-    except Exception as e:
-        return {'error':str(e)}
-    finally:
         cursor.close()
         cnx.close()
+        return {'success', f'added column: {type}'}
+    except Exception as e:
+        return {'error':str(e)}
+        
 
 
 if __name__ == "__main__":
