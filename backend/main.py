@@ -17,7 +17,21 @@ async def create_entity(
     if not entity_id or not entity_type:
         raise HTTPException(status_code=400, detail="Invalid payload format")
 
-    data = database.save_entity(payload)
+    data = database.insert_entity(payload)
+    return data
+
+@app.patch("/types/{type}")
+async def modify_entity(
+    type: str = Path(..., title="Entity ID"),
+    payload: Dict = Body(..., title="Payload Information",
+                         description="Data to added to the structure of the entity",
+                         example={"field":"temperature", "type":"float"})
+):
+
+    if not type or not payload:
+        raise HTTPException(status_code=400, detail="Invalid payload format")
+
+    data = database.modify_type_table(type, payload)
     return data
 
 @app.get("/entities/{entity_id}")
