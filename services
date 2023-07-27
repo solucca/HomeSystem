@@ -15,5 +15,10 @@ case "${command}" in
             echo "Stopping containers"
             docker rm -f $CONTAINERS || true
         fi
+        NETWORKS=$(docker network ls  --filter "label=org.fiware=SmartWorld" -q) 
+        if [[ -n $NETWORKS ]]; then 
+            echo "Removing SmartWorld networks"
+            docker network rm $NETWORKS || true
+        fi
     ;;
 esac
