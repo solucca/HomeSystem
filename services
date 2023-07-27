@@ -7,7 +7,7 @@ fi
 command="$1"
 case "${command}" in
     "start")
-    docker compose -p smarthome up -d
+    docker compose -p smarthome up -d --build
     ;;
     "stop")
         CONTAINERS=$(docker ps --filter "label=org.solucca=SmartHome" -aq)
