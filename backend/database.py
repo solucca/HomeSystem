@@ -213,15 +213,16 @@ def modify_type_table(type: str, new_column: dict):
     else:
         return {"error": f"Datatype {new_column['type']} does not exist"}
     try:
-        cnx = mysql.connector.connect()
+        cnx = mysql.connector.connect(**DATABASE_CONFIG)
         cursor = cnx.cursor()
         cursor.execute(f"ALTER TABLE {type} ADD {new_column['field']} {datatype};")
-        cursor.close()
-        cnx.close()
         return {'success', f'added column: {type}'}
+    
     except Exception as e:
         return {'error':str(e)}
-        
+    finally:
+        cursor.close()
+        cnx.close()
 
 
 if __name__ == "__main__":
