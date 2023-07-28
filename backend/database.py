@@ -38,7 +38,7 @@ def __check_format(payload: Dict) -> bool:
 
 
 def __entity_exists(id:str, type:str) -> bool:
-    conn,cursor = connect(**DATABASE_CONFIG)
+    conn,cursor = connect()
     try:
         cursor.execute("SELECT * FROM entities where type = %s AND id = %s;", (type, id))
         result = cursor.fetchall()
@@ -69,7 +69,7 @@ def __create_type_table(payload: Dict) -> str:
     entity_type: str = payload.get("type").lower()
 
     # Connect to the MariaDB database
-    conn, cursor = connect(**DATABASE_CONFIG)
+    conn, cursor = connect()
 
     try:
         # Create the SQL query to create the table
@@ -183,7 +183,7 @@ def __match_schema(payload: dict) -> bool:
     if not __type_table_exists(payload.get("type").lower()):
         return False
     entity_type = payload.get("type").lower()
-    cnx, cursor = connect(**DATABASE_CONFIG)
+    cnx, cursor = connect()
     try:
         cursor.execute(f"DESCRIBE {entity_type};")
         data = [i[0] for i in cursor.fetchall()]
@@ -214,7 +214,7 @@ def __get_entitiy(id: str) -> Dict:
     
 
 def __type_table_exists(table_name: str) -> bool:
-    cnx, cursor = connect(**DATABASE_CONFIG)
+    cnx, cursor = connect()
     cursor.execute("SHOW TABLES;")
     tables = []
     for name in cursor:
@@ -227,7 +227,7 @@ def __type_table_exists(table_name: str) -> bool:
 def get_columns(type: str) -> Union[List, Dict]:
     """Get Columns of table"""
     try:
-        cnx,cursor = connect(**DATABASE_CONFIG)
+        cnx,cursor = connect()
         cursor.execute(f"DESCRIBE {type};")
         out = [{"Field": i[0], "Type": i[1]} for i in cursor.fetchall()]
         return out
@@ -260,7 +260,7 @@ def modify_type_table(type: str, new_column: dict):
     else:
         return {"error": f"Datatype {new_column['type']} does not exist"}
     try:
-        cnx, cursor = connect(**DATABASE_CONFIG)
+        cnx, cursor = connect()
         cursor.execute(f"ALTER TABLE {type} ADD {new_column['field']} {datatype};")
         return {"success", f"added column: {type}"}
 
@@ -299,7 +299,7 @@ def get_entity(entity_id: str, n: int = None) -> Dict[str, object]:
         return {"Error": f"No data for the type {entity['type']}"}
 
     # Connect to the MariaDB database
-    conn, cursor = connect(**DATABASE_CONFIG)
+    conn, cursor = connect()
 
     try:
         # Construct the SELECT query
