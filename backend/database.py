@@ -5,21 +5,71 @@
 """
 
 import mysql.connector
-from typing import Dict, List, Union
+from mysql.connector import MySQLConnection
+from mysql.connector.connection import MySQLCursor
+from typing import Dict, List, Tuple, Union
 import json
+from datetime import datetime
 
 DATABASE_CONFIG = {}
 with open("./credentials.json", "r") as f:
     DATABASE_CONFIG = json.load(f)
 
-
-def create_type_table(payload: dict) -> str:
-    """Creates a table for the entity type provided in the payload"""
-    entity_type: str = payload.get("type")
-
-    # Connect to the MariaDB database
+def connect() -> Tuple[MySQLConnection, MySQLCursor]:
     conn = mysql.connector.connect(**DATABASE_CONFIG)
     cursor = conn.cursor()
+    return conn, cursor
+
+def close(cnx: MySQLConnection, cursor: MySQLCursor):
+    cursor.close()
+    cnx.close()
+
+
+def __check_format(payload: Dict) -> bool:
+    """Returns True on error"""
+    if not "id" in payload.keys(): return True
+    if not "type" in payload.keys(): return True
+    for key in payload:
+        if key in ["id" , "type"]: continue
+        value = payload[key]
+        if not "type" in value.keys(): return True
+        if not "value" in value.keys(): return True
+    return False
+
+
+def __entity_exists(id:str, type:str) -> bool:
+    conn,cursor = connect(**DATABASE_CONFIG)
+    try:
+        cursor.execute("SELECT * FROM entities where type = %s AND id = %s;", (type, id))
+        result = cursor.fetchall()
+        return len(result) > 0
+    finally:
+        cursor.close()
+        conn.close()
+        
+
+def __create_entites_table() -> Union[bool,Dict]:
+    try:
+        cnx, cursor = connect()
+        cursor.execute("""CREATE TABLE IF NOT EXISTS entities (
+                    id VARCHAR(64) PRIMARY KEY,
+                    type VARCHAR(64),
+                    last_update DATETIME,
+                    data JSON); """)
+        cnx.commit()
+        return True
+    except Exception as e:
+        return {"error":str(e)}
+    finally:
+        close(cnx, cursor)
+        
+
+def __create_type_table(payload: Dict) -> str:
+    """Creates a table for the entity type provided in the payload"""
+    entity_type: str = payload.get("type").lower()
+
+    # Connect to the MariaDB database
+    conn, cursor = connect(**DATABASE_CONFIG)
 
     try:
         # Create the SQL query to create the table
@@ -61,66 +111,45 @@ def create_type_table(payload: dict) -> str:
     return table_name
 
 
-def table_exists(table_name: str) -> bool:
-    cnx = mysql.connector.connect(**DATABASE_CONFIG)
-    cursor = cnx.cursor()
-    cursor.execute("SHOW TABLES;")
-    tables = []
-    for name in cursor:
-        tables.append(name[0])
-    cursor.close()
-    cnx.close()
-    return table_name.lower() in tables
-
-
-def match_schema(payload: dict) -> bool:
-    if not table_exists(payload.get("type")):
-        return False
-    entity_type = payload.get("type").lower()
-    cnx = mysql.connector.connect(**DATABASE_CONFIG)
-    cursor = cnx.cursor()
+def __insert_entities(entity: Dict):
+    data = entity.copy()
+    type = data.get("type").lower()
+    id = data.get("id")
+    del data["type"]
+    del data ["id"]
     try:
-        cursor.execute(f"DESCRIBE {entity_type};")
-        data = [i[0] for i in cursor.fetchall()]
-        for key, value in payload.items():
-            if key in ["id", "type"]:
-                continue
-            elif not key in data:
-                return False
-        return True
-
-    finally:
-        cursor.close()
-        cnx.close()
-
-
-def get_columns(type: str) -> Union[List, Dict]:
-    """ Get Columns of table
-    """
-    try:
-        cnx = mysql.connector.connect(**DATABASE_CONFIG)
-        cursor = cnx.cursor()
-        cursor.execute(f"DESCRIBE {type};")
-        out = [{"Field": i[0], "Type": i[1]} for i in cursor.fetchall()]
-        return out
+        conn, cursor = connect()
+        cursor.execute("INSERT INTO entities (%s, %s, %s, %s)",
+                    (id, type, str(datetime.utcnow()), str(data))
+                    )
+        conn.commit()
     except Exception as e:
-        return {"error" : str(e)}
+        return {"error":str(e)}
     finally:
-        cnx.close()
-        cursor.close()
+        close(conn, cursor)
 
 
-def insert_entity(payload: dict) -> bool:
-    """Saves the Entity in a Table.
-    If there is no Table for this Type of entity, one is created.
-    """
+def __update_entities(entity: Dict):
+    data = entity.copy()
+    id = entity.get("id").lower()
+    del data["type"]
+    del data ["id"]
+    cnx, cursor = connect()
+    try:
+        cursor.execute("""UPDATE entites
+                       SET last_update = %s, data = %s
+                       WHERE id = %s""", 
+                       (str(datetime.utcnow()), str(data), id))
+        cnx.commit()
+    finally:
+        close(cnx, cursor)
+
+
+def __insert_data(payload: Dict):
     entity_id, entity_type = payload.get("id"), payload.get("type").lower()
-
-    if not table_exists(entity_type):
-        create_type_table(payload)
-    if not match_schema(payload):
-        return False
-
+    if not __match_schema(payload):
+        return {"error":"entity does not match the schema"}
+    
     # Construct the SQL insert query
     columns = ["entity_id"]
     values = [entity_id]
@@ -137,8 +166,7 @@ def insert_entity(payload: dict) -> bool:
     sql = f"INSERT INTO {entity_type} ({', '.join(columns)}) VALUES ({placeholders})"
 
     # Connect to the MariaDB database
-    cnx = mysql.connector.connect(**DATABASE_CONFIG)
-    cursor = cnx.cursor()
+    cnx,cursor = connect()
 
     try:
         # Execute the SQL query
@@ -150,30 +178,132 @@ def insert_entity(payload: dict) -> bool:
         cursor.close()
         cnx.close()
 
-    return True
+
+def __match_schema(payload: dict) -> bool:
+    if not __type_table_exists(payload.get("type").lower()):
+        return False
+    entity_type = payload.get("type").lower()
+    cnx, cursor = connect(**DATABASE_CONFIG)
+    try:
+        cursor.execute(f"DESCRIBE {entity_type};")
+        data = [i[0] for i in cursor.fetchall()]
+        for key, value in payload.items():
+            if key in ["id", "type"]:
+                continue
+            elif not key in data:
+                return False
+        return True
+
+    finally:
+        cursor.close()
+        cnx.close()
+
+
+def __get_entitiy(id: str) -> Dict:
+    
+    cnx, cursor = connect()
+    try:
+        cursor.execute("SELECT * FROM entities WHERE id=%s;", (id))
+        out = cursor.fetchall()[0]
+        if len(out) != 4: return None
+        return {
+            "id":out[0], "type":out[1], "last_update":out[2],"data":out[3]
+        }
+    finally:
+        close(cnx, cursor)
+    
+
+def __type_table_exists(table_name: str) -> bool:
+    cnx, cursor = connect(**DATABASE_CONFIG)
+    cursor.execute("SHOW TABLES;")
+    tables = []
+    for name in cursor:
+        tables.append(name[0])
+    cursor.close()
+    cnx.close()
+    return table_name.lower() in tables
+
+
+def get_columns(type: str) -> Union[List, Dict]:
+    """Get Columns of table"""
+    try:
+        cnx,cursor = connect(**DATABASE_CONFIG)
+        cursor.execute(f"DESCRIBE {type};")
+        out = [{"Field": i[0], "Type": i[1]} for i in cursor.fetchall()]
+        return out
+    except Exception as e:
+        return {"error": str(e)}
+    finally:
+        cnx.close()
+        cursor.close()
+
+
+def modify_type_table(type: str, new_column: dict):
+    """new_column example:
+    {"field":"humidity", "type":"float"}
+    """
+    if not __type_table_exists(type):
+        return {"error": f"Type {type} does not exist"}
+    columns = get_columns(type)
+    for column in columns:
+        if column["Field"] == new_column["field"]:
+            return {"error": f"Field {new_column['field']} already exists"}
+
+    if new_column["type"] == "str":
+        datatype = "VARCHAR(255)"
+    elif new_column["type"] == "float":
+        datatype = "FLOAT"
+    elif new_column["type"] == "int":
+        datatype = "INT"
+    elif new_column["type"] == "datetime":
+        datatype = "DATETIME"
+    else:
+        return {"error": f"Datatype {new_column['type']} does not exist"}
+    try:
+        cnx, cursor = connect(**DATABASE_CONFIG)
+        cursor.execute(f"ALTER TABLE {type} ADD {new_column['field']} {datatype};")
+        return {"success", f"added column: {type}"}
+
+    except Exception as e:
+        return {"error": str(e)}
+    finally:
+        cursor.close()
+        cnx.close()
+
+
+######################
+#### EXTERNAL USE ####
+######################
+
+def create_entity(payload: Dict):
+    if __check_format(payload):
+        return {"error":"Invalid payload format"}
+    if __entity_exists(payload.get("id"), payload.get("type").lower()):
+        __insert_data(payload)
+        __update_entities(payload)
+        return {"success":"updated entity"}
+    else: # entity does not exists
+        __create_type_table(payload) # create type table if not exists
+        __insert_data(payload)       # insert into type table
+        __insert_entities(payload)          # insert into entities table
+        return {"success":"created entity"}
 
 
 def get_entity(entity_id: str, n: int = None) -> Dict[str, object]:
-    """Saves the Entity in a Table.
-    If there is no Table for this Type of entity, one is created.
-    """
-    if not ":" in entity_id:
-        return {"Error": "Wrong Format <Entity_Type>:<Entity_Id>"}
-    entity_type, entity_id = entity_id.split(":")
-    table_name = entity_type.lower()
+    entity = __get_entitiy(entity_id)
+    if n is None:
+        return entity
+        
 
-    if not table_exists(entity_type):
-        return {"Error": f"No data for the type {entity_type}"}
-    if not n:
-        n = 1
+    if not __type_table_exists(entity["type"]):
+        return {"Error": f"No data for the type {entity['type']}"}
 
     # Connect to the MariaDB database
-    conn = mysql.connector.connect(**DATABASE_CONFIG)
-    cursor = conn.cursor()
+    conn, cursor = connect(**DATABASE_CONFIG)
 
     try:
         # Construct the SELECT query
-        select_query = f"SELECT * FROM {table_name} WHERE entity_id = %s ORDER BY timestamp DESC LIMIT {n}"
+        select_query = f"SELECT * FROM {entity['type']} WHERE entity_id = %s ORDER BY timestamp DESC LIMIT {n}"
         cursor.execute(select_query, (entity_id,))
 
         data = cursor.fetchmany(n)
@@ -187,47 +317,15 @@ def get_entity(entity_id: str, n: int = None) -> Dict[str, object]:
         return out
 
     finally:
-        # Close the cursor and connection
-        cursor.close()
-        conn.close()
+        close(conn, cursor)
 
 
-def modify_type_table(type: str, new_column: dict):
-    """ new_column example: 
-        {"field":"humidity", "type":"float"}
-    """
-    if not table_exists(type): return {"error": f"Type {type} does not exist"}
-    columns = get_columns(type)
-    for column in columns:
-        if column["Field"] == new_column["field"]:
-            return {"error": f"Field {new_column['field']} already exists"}
-        
-    if new_column["type"] == "str":
-        datatype = "VARCHAR(255)"
-    elif new_column["type"] == "float":
-        datatype = "FLOAT"
-    elif new_column["type"] == "int":
-        datatype = "INT"
-    elif new_column["type"] == "datetime":
-        datatype = "DATETIME"
-    else:
-        return {"error": f"Datatype {new_column['type']} does not exist"}
-    try:
-        cnx = mysql.connector.connect(**DATABASE_CONFIG)
-        cursor = cnx.cursor()
-        cursor.execute(f"ALTER TABLE {type} ADD {new_column['field']} {datatype};")
-        return {'success', f'added column: {type}'}
-    
-    except Exception as e:
-        return {'error':str(e)}
-    finally:
-        cursor.close()
-        cnx.close()
 
+__create_entites_table()
 
 if __name__ == "__main__":
     print("Running test on database")
-    print(f"Testing connection: {table_exists('SoilSensor')}")
+    print(f"Testing connection: {__type_table_exists('SoilSensor')}")
     payload = {
         "id": "01",
         "type": "SoilSensor",

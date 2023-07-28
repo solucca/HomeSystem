@@ -11,16 +11,6 @@ def send_post_request(payload):
 
     if response.status_code == 200:
         print("POST request successful. Entity created.")
-    else:
-        print(f"Failed to create entity. Status code: {response.status_code}")
-        print(response.text)
-
-def modify_table(payload):
-    url = "http://mypi:8000/types/weather"
-    headers = {"Content-Type": "application/json"}
-    response = requests.patch(url, headers=headers, data=json.dumps(payload))
-    if response.status_code == 200:
-        print("POST request successful. Entity created.")
         print(response.text)
     else:
         print(f"Failed to create entity. Status code: {response.status_code}")
@@ -29,7 +19,11 @@ def modify_table(payload):
 
 if __name__ == "__main__":
     # Replace with the desired payload
-    payload = {"field":"humidity", "type":"float"}
-    modify_table(payload)
-    payload = {"field":"heat_index", "type":"float"}
-    modify_table(payload)
+    payload = {
+        "id" : "lucca_temp",
+        "type" : "weather_observer",
+        "temperature" : {"type":"float","value":15.0,"unit":"Celsius"},
+        "relative_humidity" : {"type":"int","value":27,"unit":"Percent"},
+        "absolute_humidity" : {"type":"float","value":15.0,"unit":"g/m3"}
+    }
+    send_post_request(payload)
