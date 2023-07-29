@@ -203,7 +203,7 @@ def __get_entitiy(id: str) -> Dict:
     
     cnx, cursor = connect()
     try:
-        cursor.execute("SELECT * FROM entities WHERE id=%s;", (id))
+        cursor.execute("SELECT * FROM entities WHERE id=%s;", (id,))
         out = cursor.fetchall()[0]
         if len(out) != 4: return None
         return {
