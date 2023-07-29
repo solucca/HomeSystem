@@ -117,13 +117,16 @@ def __insert_entities(entity: Dict):
     id = data.get("id")
     del data["type"]
     del data ["id"]
+    obj = json.dumps(data)
     try:
         conn, cursor = connect()
-        cursor.execute("INSERT INTO entities (%s, %s, %s, %s)",
-                    (id, type, str(datetime.utcnow()), str(data))
+        cursor.execute("INSERT INTO entities VALUES (%s, %s, %s, %s)",
+                    (id, type, str(datetime.utcnow()), obj)
                     )
         conn.commit()
     except Exception as e:
+        print(e)
+        print(obj)
         return {"error":str(e)}
     finally:
         close(conn, cursor)
@@ -134,13 +137,19 @@ def __update_entities(entity: Dict):
     id = entity.get("id").lower()
     del data["type"]
     del data ["id"]
+    obj = json.dumps(data)
     cnx, cursor = connect()
     try:
-        cursor.execute("""UPDATE entites
+        cursor.execute("""UPDATE entities
                        SET last_update = %s, data = %s
                        WHERE id = %s""", 
-                       (str(datetime.utcnow()), str(data), id))
+                       (str(datetime.utcnow()), obj, id))
         cnx.commit()
+    except Exception as e:
+        print("-----------------")
+        print(e)
+        print(obj)
+        print("-----------------")
     finally:
         close(cnx, cursor)
 
@@ -204,6 +213,8 @@ def __get_entitiy(id: str) -> Dict:
     cnx, cursor = connect()
     try:
         cursor.execute("SELECT * FROM entities WHERE id=%s;", (id,))
+        result = cursor.fetchall()
+        if len(result) == 0: return None
         out = cursor.fetchall()[0]
         if len(out) != 4: return None
         return {
@@ -324,18 +335,14 @@ def get_entity(entity_id: str, n: int = None) -> Dict[str, object]:
 __create_entites_table()
 
 if __name__ == "__main__":
-    print("Running test on database")
-    print(f"Testing connection: {__type_table_exists('SoilSensor')}")
     payload = {
-        "id": "01",
-        "type": "SoilSensor",
-        "temperature": {"type": "float", "value": 15.0},
-        "soil_humidity": {"type": "int", "value": 28},
-        "last_water": {"type": "datetime", "value": "2020-07-26 20:20:20"},
-    }
-    payload2 = {
         "id": "02",
-        "type": "weather",
-        "temperature": {"type": "float", "value": 15.0},
+        "type": "weather_observer",
+        "temperature":          {"type": "float", "value": 15.0, "unit":"°C"},
+        "relative_humidity":    {"type": "float", "value": 15.0, "unit":"%"},
+        "absolute_humidity":    {"type": "float", "value": 15.0, "unit":"g/m3"},
+        "heat_index":           {"type": "float", "value": 15.0, "unit":"°C"},
+        "perception":           {"type": "int", "value": 0},
+        "dew_point":            {"type": "float", "value": 15.0, "unit":"°C Td"},
     }
-    print(get_entity("weather:02"))
+    print(__update_entities(payload))
