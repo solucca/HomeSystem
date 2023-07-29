@@ -215,10 +215,9 @@ def __get_entitiy(id: str) -> Dict:
         cursor.execute("SELECT * FROM entities WHERE id=%s;", (id,))
         result = cursor.fetchall()
         if len(result) == 0: return None
-        out = cursor.fetchall()[0]
-        if len(out) != 4: return None
+        if len(result[0]) != 4: return None
         return {
-            "id":out[0], "type":out[1], "last_update":out[2],"data":out[3]
+            "id":result[0][0], "type":result[0][1], "last_update":result[0][2],"data":result[0][3]
         }
     finally:
         close(cnx, cursor)
@@ -345,4 +344,4 @@ if __name__ == "__main__":
         "perception":           {"type": "int", "value": 0},
         "dew_point":            {"type": "float", "value": 15.0, "unit":"°C Td"},
     }
-    print(__update_entities(payload))
+    print(get_entity("02"))
